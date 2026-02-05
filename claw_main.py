@@ -11,12 +11,14 @@ import logging
 import json
 import os
 from datetime import datetime
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, List
 
 # Import the new community integration module
 from community_integration import CommunityIntegration
 # Import the community monitoring task
 from tasks.community_monitor_task import CommunityMonitorTask
+# Import the database module
+from database import DatabaseManager
 
 
 class TaskEngine:
@@ -52,8 +54,9 @@ class TaskEngine:
 class MemorySystem:
     """Handles persistent memory and learning"""
     
-    def __init__(self, storage_path: str = "./memory.json"):
+    def __init__(self, storage_path: str = "./memory.json", db_path: str = "./claw_data.db"):
         self.storage_path = storage_path
+        self.database = DatabaseManager(db_path)
         self.memory = self._load_memory()
         
     def _load_memory(self) -> Dict[str, Any]:
@@ -82,6 +85,7 @@ class MemorySystem:
             
     def store_interaction(self, interaction: Dict[str, Any]):
         """Store an interaction in memory"""
+        # Store in JSON for immediate access
         self.memory["interactions"].append({
             "timestamp": datetime.now().isoformat(),
             **interaction
@@ -91,16 +95,27 @@ class MemorySystem:
             self.memory["interactions"] = self.memory["interactions"][-100:]
         self._save_memory()
         
-    def store_learning(self, learning: str):
+        # Also store in database for structured access
+        user_input = interaction.get('user_input', '')
+        assistant_response = interaction.get('assistant_response', '')
+        context = {k: v for k, v in interaction.items() if k not in ['user_input', 'assistant_response']}
+        self.database.store_interaction(user_input, assistant_response, context)
+        
+    def store_learning(self, learning: str, source: str = None, tags: List[str] = None):
         """Store a learning in memory"""
+        # Store in JSON for immediate access
         self.memory["learnings"].append({
             "timestamp": datetime.now().isoformat(),
             "learning": learning
         })
         self._save_memory()
         
+        # Also store in database for structured access
+        self.database.store_learning(learning, source, tags)
+        
     def store_community_insight(self, source: str, topic: str, insight: str):
         """Store insights from community sources like Moltbook"""
+        # Store in JSON for immediate access
         insight_entry = {
             "timestamp": datetime.now().isoformat(),
             "source": source,
@@ -116,11 +131,14 @@ class MemorySystem:
         self._save_memory()
         self.logger.info(f"Stored community insight from {source} about {topic}")
         
+        # Also store in database for structured access
+        self.database.store_community_insight(source, topic, insight)
+        
     def get_relevant_knowledge(self, topic: str) -> list:
         """Retrieve relevant knowledge from memory"""
         relevant_items = []
         
-        # Search in learnings
+        # Search in JSON memory
         for item in self.memory["learnings"]:
             if topic.lower() in item.get("learning", "").lower():
                 relevant_items.append(item)
@@ -129,6 +147,16 @@ class MemorySystem:
         for item in self.memory["community_insights"]:
             if topic.lower() in item.get("topic", "").lower() or topic.lower() in item.get("insight", "").lower():
                 relevant_items.append(item)
+        
+        # Also search in database for more comprehensive results
+        db_results = self.database.search_learnings(topic, limit=5)
+        for item in db_results:
+            relevant_items.append({
+                "timestamp": item["timestamp"],
+                "learning": item["learning_content"],
+                "source": item["source"],
+                "relevance_score": item["relevance_score"]
+            })
         
         return relevant_items
 
