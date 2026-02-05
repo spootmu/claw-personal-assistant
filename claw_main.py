@@ -13,6 +13,9 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Callable
 
+# Import the new community integration module
+from community_integration import CommunityIntegration
+
 
 class TaskEngine:
     """Handles execution of various tasks"""
@@ -59,7 +62,13 @@ class MemorySystem:
                     return json.load(f)
             except Exception as e:
                 print(f"Error loading memory: {e}")
-        return {"interactions": [], "learnings": [], "preferences": {}}
+        return {
+            "interactions": [], 
+            "learnings": [], 
+            "preferences": {},
+            "knowledge_base": [],
+            "community_insights": []  # New: Store insights from community like Moltbook
+        }
         
     def _save_memory(self):
         """Save memory to storage"""
@@ -87,6 +96,39 @@ class MemorySystem:
             "learning": learning
         })
         self._save_memory()
+        
+    def store_community_insight(self, source: str, topic: str, insight: str):
+        """Store insights from community sources like Moltbook"""
+        insight_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "source": source,
+            "topic": topic,
+            "insight": insight
+        }
+        self.memory["community_insights"].append(insight_entry)
+        
+        # Keep only last 50 insights to prevent memory bloat
+        if len(self.memory["community_insights"]) > 50:
+            self.memory["community_insights"] = self.memory["community_insights"][-50:]
+        
+        self._save_memory()
+        self.logger.info(f"Stored community insight from {source} about {topic}")
+        
+    def get_relevant_knowledge(self, topic: str) -> list:
+        """Retrieve relevant knowledge from memory"""
+        relevant_items = []
+        
+        # Search in learnings
+        for item in self.memory["learnings"]:
+            if topic.lower() in item.get("learning", "").lower():
+                relevant_items.append(item)
+                
+        # Search in community insights
+        for item in self.memory["community_insights"]:
+            if topic.lower() in item.get("topic", "").lower() or topic.lower() in item.get("insight", "").lower():
+                relevant_items.append(item)
+        
+        return relevant_items
 
 
 class ClawAssistant:
@@ -96,11 +138,12 @@ class ClawAssistant:
     
     def __init__(self):
         self.name = "Claw"
-        self.version = "0.2.0"
+        self.version = "0.3.0"
         self.created_at = datetime.now()
         self.logger = self._setup_logger()
         self.task_engine = TaskEngine(self)
         self.memory_system = MemorySystem()
+        self.community_integration = None  # Will be initialized in _initialize_components
         self.config = self._load_config()
         
     def _setup_logger(self):
@@ -145,6 +188,14 @@ class ClawAssistant:
         """Initialize all components"""
         self.logger.info("Initializing components...")
         
+        # Initialize community integration
+        self.community_integration = CommunityIntegration(self)
+        self.logger.info("Community integration initialized")
+        
+        # Perform initial community insight processing
+        async with self.community_integration as ci:
+            await ci.process_community_insights()
+        
     async def _register_default_tasks(self):
         """Register default tasks"""
         # Example task: periodic health check
@@ -187,6 +238,37 @@ class ClawAssistant:
     def store_learning(self, learning: str):
         """Store a learning in memory"""
         self.memory_system.store_learning(learning)
+        
+    async def apply_community_insights(self, topic: str):
+        """Apply insights from community to improve functionality"""
+        async with self.community_integration as ci:
+            relevant_info = await ci.get_relevant_community_info(topic)
+            
+            if relevant_info:
+                self.logger.info(f"Found {len(relevant_info)} relevant insights for topic '{topic}'")
+                
+                for info in relevant_info:
+                    insight_text = f"From {info['source']} - {info['topic']}: {info['content']}"
+                    self.store_community_insight(info['source'], info['topic'], info['content'])
+                    
+                    # Apply the insight to improve functionality
+                    if 'modular' in insight_text.lower() and 'architecture' in insight_text.lower():
+                        self.logger.info("Applying modular architecture insight to enhance design")
+                        # Implementation would go here
+                        
+                    elif 'task queue' in insight_text.lower() or 'priority' in insight_text.lower():
+                        self.logger.info("Applying task scheduling insight to enhance TaskEngine")
+                        # Implementation would go here
+                        
+                    elif 'memory' in insight_text.lower() and 'performance' in insight_text.lower():
+                        self.logger.info("Applying memory management insight to enhance MemorySystem")
+                        # Implementation would go here
+            else:
+                self.logger.info(f"No relevant insights found for topic '{topic}'")
+                
+    def store_community_insight(self, source: str, topic: str, insight: str):
+        """Store community insight in memory"""
+        self.memory_system.store_community_insight(source, topic, insight)
 
 
 async def main():
