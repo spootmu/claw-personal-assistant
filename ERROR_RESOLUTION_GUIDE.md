@@ -48,5 +48,13 @@
 - Use git status to review all staged files before committing
 - For privacy files, use local storage instead of version control
 
+## Common Error #7: Storing Credentials in Source Code
+**Problem**: Creating files with embedded API keys or credentials in project directories
+**Solution**: Never store credentials directly in source files
+- Use environment variables for sensitive information
+- Implement secure configuration systems instead of hardcoding credentials
+- If testing APIs, use temporary files outside the project or secure vaults
+- Immediately delete any files containing credentials that were created accidentally
+
 ## Key Takeaway
 Always check tool parameters carefully before execution to avoid common mistakes that waste resources and cause errors.
