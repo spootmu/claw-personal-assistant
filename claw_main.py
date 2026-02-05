@@ -23,6 +23,8 @@ from database import DatabaseManager
 from tasks.intelligent_scheduler import IntelligentScheduler, TaskPriority
 # Import the task manager
 from tasks.task_manager import TaskManager
+# Import the learning system
+from learning_system import LearningSystem
 
 
 class TaskEngine:
@@ -172,12 +174,13 @@ class ClawAssistant:
     
     def __init__(self):
         self.name = "Claw"
-        self.version = "0.5.0"
+        self.version = "0.6.0"
         self.created_at = datetime.now()
         self.logger = self._setup_logger()
         self.task_engine = TaskEngine(self)
         self.intelligent_scheduler = IntelligentScheduler(self)  # New: Advanced task scheduler
         self.task_manager = None  # Will be initialized in _initialize_components
+        self.learning_system = None  # Will be initialized in _initialize_components
         self.memory_system = MemorySystem()
         self.community_integration = None  # Will be initialized in _initialize_components
         self.config = self._load_config()
@@ -236,6 +239,11 @@ class ClawAssistant:
         self.task_manager = TaskManager(self)
         await self.task_manager.start_background_services()
         self.logger.info("Task manager started with background services")
+        
+        # Initialize learning system
+        self.learning_system = LearningSystem(self)
+        self.learning_system.start_learning_cycle()
+        self.logger.info("Learning system started with continuous learning cycle")
         
         # Perform initial community insight processing
         async with self.community_integration as ci:
@@ -351,8 +359,24 @@ class ClawAssistant:
                     elif 'memory' in insight_text.lower() and 'performance' in insight_text.lower():
                         self.logger.info("Applying memory management insight to enhance MemorySystem")
                         # Implementation would go here
+                    
+                    # Process the insight through the learning system
+                    if self.learning_system:
+                        await self.learning_system.process_community_insight(
+                            insight_source=info['source'],
+                            topic=info['topic'],
+                            content=info['content']
+                        )
             else:
                 self.logger.info(f"No relevant insights found for topic '{topic}'")
+                
+        # Also apply insights to the learning system
+        if self.learning_system:
+            await self.learning_system.process_community_insight(
+                insight_source="internal",
+                topic=topic,
+                content=f"Applied community insights for topic: {topic}"
+            )
                 
     def store_community_insight(self, source: str, topic: str, insight: str):
         """Store community insight in memory"""
