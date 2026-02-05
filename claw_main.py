@@ -19,6 +19,8 @@ from community_integration import CommunityIntegration
 from tasks.community_monitor_task import CommunityMonitorTask
 # Import the database module
 from database import DatabaseManager
+# Import the intelligent scheduler
+from tasks.intelligent_scheduler import IntelligentScheduler, TaskPriority
 
 
 class TaskEngine:
@@ -168,10 +170,11 @@ class ClawAssistant:
     
     def __init__(self):
         self.name = "Claw"
-        self.version = "0.3.0"
+        self.version = "0.4.0"
         self.created_at = datetime.now()
         self.logger = self._setup_logger()
         self.task_engine = TaskEngine(self)
+        self.intelligent_scheduler = IntelligentScheduler(self)  # New: Advanced task scheduler
         self.memory_system = MemorySystem()
         self.community_integration = None  # Will be initialized in _initialize_components
         self.config = self._load_config()
@@ -222,6 +225,10 @@ class ClawAssistant:
         self.community_integration = CommunityIntegration(self)
         self.logger.info("Community integration initialized")
         
+        # Initialize intelligent scheduler
+        self.intelligent_scheduler.start()
+        self.logger.info("Intelligent scheduler started")
+        
         # Perform initial community insight processing
         async with self.community_integration as ci:
             await ci.process_community_insights()
@@ -234,7 +241,7 @@ class ClawAssistant:
         
         await self.task_engine.register_task("health_check", health_check, "every_5_minutes")
         
-        # Register community monitoring task
+        # Register community monitoring task with intelligent scheduler
         self.community_monitor = CommunityMonitorTask(self)
         async def run_community_monitor():
             # Run the community monitor for a short period then return
@@ -243,7 +250,39 @@ class ClawAssistant:
             await asyncio.sleep(1)  # Short delay to allow task to start
             return {"status": "community_monitor_started", "timestamp": datetime.now().isoformat()}
         
-        await self.task_engine.register_task("community_monitor", run_community_monitor, "continuous")
+        # Schedule with the intelligent scheduler
+        self.intelligent_scheduler.schedule_task(
+            name="community_monitor",
+            coroutine=run_community_monitor,
+            priority=TaskPriority.NORMAL,
+            delay_seconds=0,
+            tags=["community", "monitoring"]
+        )
+        
+        # Schedule periodic health checks with the intelligent scheduler
+        async def scheduled_health_check():
+            result = await health_check()
+            self.logger.info(f"Health check result: {result}")
+            return result
+        
+        # Schedule health checks to run every 5 minutes
+        import threading
+        def schedule_periodic_health_checks():
+            async def run_periodic():
+                while True:
+                    try:
+                        await scheduled_health_check()
+                        await asyncio.sleep(300)  # 5 minutes
+                    except Exception as e:
+                        self.logger.error(f"Error in periodic health check: {e}")
+                        await asyncio.sleep(300)  # Still wait 5 minutes before retry
+            
+            asyncio.create_task(run_periodic())
+        
+        # Start the periodic health checks in the background
+        schedule_periodic_health_checks()
+        
+        self.logger.info("Default tasks registered with intelligent scheduler")
         
     async def run(self):
         """Main run loop"""
