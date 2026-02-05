@@ -62,7 +62,7 @@ class MemorySystem:
     
     def __init__(self, storage_path: str = "./memory.json", db_path: str = "./claw_data.db"):
         self.storage_path = storage_path
-        self.database = DatabaseManager(db_path)
+        self.database = DatabaseManager(db_path, db_type="main")
         self.memory = self._load_memory()
         
     def _load_memory(self) -> Dict[str, Any]:
@@ -135,7 +135,10 @@ class MemorySystem:
             self.memory["community_insights"] = self.memory["community_insights"][-50:]
         
         self._save_memory()
-        self.logger.info(f"Stored community insight from {source} about {topic}")
+        if hasattr(self, 'logger'):
+            self.logger.info(f"Stored community insight from {source} about {topic}")
+        else:
+            print(f"Stored community insight from {source} about {topic}")
         
         # Also store in database for structured access
         self.database.store_community_insight(source, topic, insight)
@@ -155,14 +158,17 @@ class MemorySystem:
                 relevant_items.append(item)
         
         # Also search in database for more comprehensive results
-        db_results = self.database.search_learnings(topic, limit=5)
-        for item in db_results:
-            relevant_items.append({
-                "timestamp": item["timestamp"],
-                "learning": item["learning_content"],
-                "source": item["source"],
-                "relevance_score": item["relevance_score"]
-            })
+        try:
+            db_results = self.database.search_learnings(topic, limit=5)
+            for item in db_results:
+                relevant_items.append({
+                    "timestamp": item["timestamp"],
+                    "learning": item["learning_content"],
+                    "source": item["source"],
+                    "relevance_score": item["relevance_score"]
+                })
+        except Exception as e:
+            self.logger.warning(f"Could not search learnings in database: {str(e)}")
         
         return relevant_items
 
@@ -181,7 +187,7 @@ class ClawAssistant:
         self.intelligent_scheduler = IntelligentScheduler(self)  # New: Advanced task scheduler
         self.task_manager = None  # Will be initialized in _initialize_components
         self.learning_system = None  # Will be initialized in _initialize_components
-        self.memory_system = MemorySystem()
+        self.memory_system = None  # Will be initialized in _initialize_components
         self.community_integration = None  # Will be initialized in _initialize_components
         self.config = self._load_config()
         
@@ -227,6 +233,10 @@ class ClawAssistant:
         """Initialize all components"""
         self.logger.info("Initializing components...")
         
+        # Initialize memory system first to create shared database
+        self.memory_system = MemorySystem(storage_path="./memory.json", db_path="./claw_data.db")
+        self.logger.info("Memory system initialized")
+        
         # Initialize community integration
         self.community_integration = CommunityIntegration(self)
         self.logger.info("Community integration initialized")
@@ -240,8 +250,8 @@ class ClawAssistant:
         await self.task_manager.start_background_services()
         self.logger.info("Task manager started with background services")
         
-        # Initialize learning system
-        self.learning_system = LearningSystem(self)
+        # Initialize learning system with shared database instance from MemorySystem
+        self.learning_system = LearningSystem(self, shared_database=self.memory_system.database)
         self.learning_system.start_learning_cycle()
         self.logger.info("Learning system started with continuous learning cycle")
         
@@ -407,12 +417,14 @@ class ClawAssistant:
             else:
                 self.logger.info(f"No relevant insights found for topic '{topic}'")
                 
-        # Also apply insights to the learning system
-        if self.learning_system:
+        # Also apply insights to the learning system - but only if we have actual content
+        # This prevents the creation of duplicate "Applied community insights for topic: X" entries
+        if self.learning_system and relevant_info:
+            # Only add the general topic entry if there was actual relevant info
             await self.learning_system.process_community_insight(
                 insight_source="internal",
                 topic=topic,
-                content=f"Applied community insights for topic: {topic}"
+                content=f"Applied {len(relevant_info)} community insights for topic: {topic}"
             )
                 
     def store_community_insight(self, source: str, topic: str, insight: str):

@@ -32,14 +32,22 @@ class LearningExperience:
 class LearningSystem:
     """Continuous learning and improvement system"""
     
-    def __init__(self, assistant, db_path: str = "./learning_data.db"):
+    def __init__(self, assistant, db_path: str = "./claw_data.db", shared_database=None):
         self.assistant = assistant
         self.logger = logging.getLogger(f"{assistant.name}.LearningSystem")
-        self.database = DatabaseManager(db_path)
+        # If a shared database instance is provided, use it; otherwise create new one
+        if shared_database:
+            self.database = shared_database
+        else:
+            # Use the same database as MemorySystem to avoid creating separate learning_data.db
+            self.database = DatabaseManager(db_path, db_type="main")
         self.learning_experiences = []
         self.knowledge_graph = {}  # Simple knowledge graph representation
         self.improvement_strategies = []
         self.is_active = True
+        # Track recently processed community insights to prevent duplicates
+        self.recent_community_topics = {}  # topic -> timestamp mapping
+        self.topic_duplicate_window = 300  # 5 minutes window to prevent duplicate processing
         
     async def process_task_result(self, task_id: str, result: Any, success: bool):
         """Process the result of a task execution to extract learning"""
@@ -113,6 +121,17 @@ class LearningSystem:
         if not self.is_active:
             return
             
+        # Check if we've recently processed this topic to prevent duplicates
+        current_time = datetime.now()
+        if topic in self.recent_community_topics:
+            time_diff = (current_time - self.recent_community_topics[topic]).total_seconds()
+            if time_diff < self.topic_duplicate_window:
+                self.logger.debug(f"Skipping duplicate community insight for topic '{topic}' (processed {time_diff:.1f}s ago)")
+                return
+        
+        # Update the timestamp for this topic
+        self.recent_community_topics[topic] = current_time
+        
         self.logger.info(f"Processing community insight from {insight_source} about {topic}")
         
         # Create learning experience from community insight
@@ -165,20 +184,31 @@ class LearningSystem:
     
     async def _store_learning_experience(self, experience: LearningExperience):
         """Store a learning experience in the database"""
-        # Store in database
-        self.database.store_learning(
-            learning_content=experience.content,
-            source=experience.source,
-            tags=experience.tags,
-            relevance_score=experience.relevance_score
-        )
-        
-        # Keep in memory for quick access (limit to last 100 experiences)
-        self.learning_experiences.append(experience)
-        if len(self.learning_experiences) > 100:
-            self.learning_experiences = self.learning_experiences[-100:]
-        
-        self.logger.debug(f"Stored learning experience: {experience.id}")
+        try:
+            # Store in database
+            result = self.database.store_learning(
+                learning_content=experience.content,
+                source=experience.source,
+                tags=experience.tags,
+                relevance_score=experience.relevance_score
+            )
+            
+            # Only keep in memory if successfully stored (not a duplicate)
+            if result is not None:  # If result is None, it means duplicate was detected
+                # Keep in memory for quick access (limit to last 100 experiences)
+                self.learning_experiences.append(experience)
+                if len(self.learning_experiences) > 100:
+                    self.learning_experiences = self.learning_experiences[-100:]
+            
+                self.logger.debug(f"Stored learning experience: {experience.id}")
+            else:
+                self.logger.debug(f"Skipped duplicate learning experience: {experience.content[:50]}...")
+        except Exception as e:
+            self.logger.error(f"Failed to store learning experience: {str(e)}")
+            # Fallback to in-memory storage if database fails
+            self.learning_experiences.append(experience)
+            if len(self.learning_experiences) > 100:
+                self.learning_experiences = self.learning_experiences[-100:]
     
     async def _update_knowledge_graph(self, experience: LearningExperience):
         """Update the knowledge graph with new information"""
@@ -303,6 +333,16 @@ class LearningSystem:
             try:
                 # Perform periodic learning tasks
                 await self._periodic_learning_tasks()
+                
+                # Clean up old entries from the recent topics tracking
+                current_time = datetime.now()
+                expired_topics = []
+                for topic, timestamp in self.recent_community_topics.items():
+                    if (current_time - timestamp).total_seconds() > self.topic_duplicate_window * 2:
+                        expired_topics.append(topic)
+                
+                for topic in expired_topics:
+                    del self.recent_community_topics[topic]
                 
                 # Wait before next cycle
                 await asyncio.sleep(3600)  # 1 hour

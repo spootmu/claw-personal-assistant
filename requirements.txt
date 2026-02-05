@@ -1,5 +1,4 @@
 # Requirements for Claw Personal Assistant
 aiohttp>=3.8.0
 requests
-typing
-sqlite3
+typing-extensions

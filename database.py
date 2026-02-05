@@ -15,22 +15,23 @@ from typing import Any, Dict, List, Optional
 class DatabaseManager:
     """Manages SQLite database for structured data storage"""
     
-    def __init__(self, db_path: str = "./claw_data.db"):
+    def __init__(self, db_path: str = "./claw_data.db", db_type: str = "main"):
         self.db_path = db_path
+        self.db_type = db_type  # 'main' or 'learning'
         self.connection = None
         self.init_database()
         
     def init_database(self):
-        """Initialize the database and create required tables"""
+        """Initialize the database and create all required tables"""
         self.connection = sqlite3.connect(self.db_path)
         self.connection.row_factory = sqlite3.Row  # Enable column access by name
         self.connection.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
         
-        # Create tables
+        # Create all tables regardless of type - this is a unified database
         self._create_interactions_table()
-        self._create_learnings_table()
         self._create_community_insights_table()
         self._create_sessions_table()
+        self._create_learnings_table()
         
         self.connection.commit()
         
@@ -49,29 +50,41 @@ class DatabaseManager:
         
     def _create_learnings_table(self):
         """Create table for storing learnings"""
+        # Drop and recreate with proper indexing to prevent duplicates
+        self.connection.execute("DROP TABLE IF EXISTS learnings")
         self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS learnings (
+            CREATE TABLE learnings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 learning_content TEXT NOT NULL,
                 source TEXT,
                 tags TEXT,
-                relevance_score REAL DEFAULT 1.0
+                relevance_score REAL DEFAULT 1.0,
+                UNIQUE(learning_content, source)  -- Prevent duplicate content from same source
             )
         """)
+        # Create index for faster searches
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_learning_content ON learnings(learning_content)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_source ON learnings(source)")
         
     def _create_community_insights_table(self):
         """Create table for storing community insights"""
+        # Drop and recreate with proper indexing to prevent duplicates
+        self.connection.execute("DROP TABLE IF EXISTS community_insights")
         self.connection.execute("""
-            CREATE TABLE IF NOT EXISTS community_insights (
+            CREATE TABLE community_insights (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 source TEXT NOT NULL,
                 topic TEXT NOT NULL,
                 insight TEXT NOT NULL,
-                processed BOOLEAN DEFAULT FALSE
+                processed BOOLEAN DEFAULT FALSE,
+                UNIQUE(source, topic, insight)  -- Prevent duplicate insights from same source on same topic
             )
         """)
+        # Create index for faster searches
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_source_topic ON community_insights(source, topic)")
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_insight ON community_insights(insight)")
         
     def _create_sessions_table(self):
         """Create table for storing session data"""
@@ -87,7 +100,11 @@ class DatabaseManager:
         """)
         
     def store_interaction(self, user_input: str, assistant_response: str, context: dict = None, metadata: dict = None):
-        """Store an interaction in the database"""
+        """Store an interaction in the database (works in both main and learning DBs, though primarily for main)"""
+        # Allow storing interactions in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for storing interactions")
+        
         cursor = self.connection.cursor()
         cursor.execute("""
             INSERT INTO interactions (timestamp, user_input, assistant_response, context, metadata)
@@ -103,23 +120,36 @@ class DatabaseManager:
         return cursor.lastrowid
         
     def store_learning(self, learning_content: str, source: str = None, tags: List[str] = None, relevance_score: float = 1.0):
-        """Store a learning in the database"""
+        """Store a learning in the database (works in both main and learning DBs)"""
+        # Allow storing learnings in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for storing learnings")
+        
         cursor = self.connection.cursor()
-        cursor.execute("""
-            INSERT INTO learnings (timestamp, learning_content, source, tags, relevance_score)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            datetime.now().isoformat(),
-            learning_content,
-            source,
-            json.dumps(tags) if tags else None,
-            relevance_score
-        ))
-        self.connection.commit()
-        return cursor.lastrowid
+        try:
+            cursor.execute("""
+                INSERT INTO learnings (timestamp, learning_content, source, tags, relevance_score)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                datetime.now().isoformat(),
+                learning_content,
+                source,
+                json.dumps(tags) if tags else None,
+                relevance_score
+            ))
+            self.connection.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            # Learning content already exists for this source (due to UNIQUE constraint)
+            print(f"Learning already exists in database for source '{source}': {learning_content[:50]}...")
+            return None  # Return None to indicate duplicate was skipped
         
     def store_community_insight(self, source: str, topic: str, insight: str):
-        """Store a community insight in the database"""
+        """Store a community insight in the database (works in both main and learning DBs)"""
+        # Allow storing community insights in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for storing community insights")
+            
         cursor = self.connection.cursor()
         cursor.execute("""
             INSERT INTO community_insights (timestamp, source, topic, insight)
@@ -134,7 +164,11 @@ class DatabaseManager:
         return cursor.lastrowid
         
     def get_recent_interactions(self, limit: int = 10) -> List[Dict]:
-        """Get recent interactions from the database"""
+        """Get recent interactions from the database (works in both main and learning DBs)"""
+        # Allow retrieving interactions in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for retrieving interactions")
+            
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT * FROM interactions 
@@ -146,7 +180,11 @@ class DatabaseManager:
         return [dict(row) for row in rows]
         
     def search_learnings(self, query: str, limit: int = 10) -> List[Dict]:
-        """Search learnings by content"""
+        """Search learnings by content (works in both main and learning DBs)"""
+        # Allow searching learnings in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for searching learnings")
+            
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT * FROM learnings 
@@ -159,7 +197,11 @@ class DatabaseManager:
         return [dict(row) for row in rows]
         
     def get_unprocessed_community_insights(self) -> List[Dict]:
-        """Get community insights that haven't been processed yet"""
+        """Get community insights that haven't been processed yet (works in both main and learning DBs)"""
+        # Allow retrieving community insights in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for retrieving community insights")
+            
         cursor = self.connection.cursor()
         cursor.execute("""
             SELECT * FROM community_insights 
@@ -171,7 +213,11 @@ class DatabaseManager:
         return [dict(row) for row in rows]
         
     def mark_insight_as_processed(self, insight_id: int):
-        """Mark a community insight as processed"""
+        """Mark a community insight as processed (works in both main and learning DBs)"""
+        # Allow marking insights as processed in either main or learning database types
+        if self.db_type not in ["main", "learning"]:
+            raise ValueError("Invalid database type for marking insights as processed")
+            
         cursor = self.connection.cursor()
         cursor.execute("""
             UPDATE community_insights 
