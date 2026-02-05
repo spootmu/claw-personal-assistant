@@ -40,3 +40,14 @@ venv/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Privacy and configuration files
+*.env
+config.json
+*.config
+PRIVATE.md
+SECRET.md
+*.secret
+memory.json
+*.md.bak
+memory/
