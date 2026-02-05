@@ -252,6 +252,41 @@ class DatabaseManager:
         finally:
             conn.close()
     
+    def get_unprocessed_community_insights(self) -> List[Dict[str, Any]]:
+        """Get all community insights that haven't been processed yet."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # For now, return all insights since we don't have a processed flag
+            cursor.execute('''
+                SELECT timestamp, source, topic, insight, id
+                FROM community_insights
+                ORDER BY timestamp DESC
+            ''')
+            rows = cursor.fetchall()
+            insights = []
+            for row in rows:
+                insight = {
+                    'timestamp': row[0],
+                    'source': row[1],
+                    'topic': row[2],
+                    'insight': row[3],
+                    'id': row[4]
+                }
+                insights.append(insight)
+            return insights
+        except Exception as e:
+            self.logger.error(f"Failed to get unprocessed community insights: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def mark_insight_as_processed(self, insight_id: int):
+        """Mark an insight as processed (placeholder - we don't actually have a processed column)."""
+        # Since we don't have a processed column in our schema, we'll just log this
+        self.logger.debug(f"Marked insight {insight_id} as processed (not implemented in schema)")
+    
     def export_data(self, export_path: str):
         """Export all data to a JSON file."""
         conn = sqlite3.connect(self.db_path)

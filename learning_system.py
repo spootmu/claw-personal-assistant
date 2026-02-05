@@ -185,24 +185,20 @@ class LearningSystem:
     async def _store_learning_experience(self, experience: LearningExperience):
         """Store a learning experience in the database"""
         try:
-            # Store in database
-            result = self.database.store_learning(
+            # Store in database - calling store_learning without relevance_score parameter
+            # since the database method doesn't accept it
+            self.database.store_learning(
                 learning_content=experience.content,
                 source=experience.source,
-                tags=experience.tags,
-                relevance_score=experience.relevance_score
+                tags=experience.tags
             )
             
-            # Only keep in memory if successfully stored (not a duplicate)
-            if result is not None:  # If result is None, it means duplicate was detected
-                # Keep in memory for quick access (limit to last 100 experiences)
-                self.learning_experiences.append(experience)
-                if len(self.learning_experiences) > 100:
-                    self.learning_experiences = self.learning_experiences[-100:]
-            
-                self.logger.debug(f"Stored learning experience: {experience.id}")
-            else:
-                self.logger.debug(f"Skipped duplicate learning experience: {experience.content[:50]}...")
+            # Keep in memory for quick access (limit to last 100 experiences)
+            self.learning_experiences.append(experience)
+            if len(self.learning_experiences) > 100:
+                self.learning_experiences = self.learning_experiences[-100:]
+        
+            self.logger.debug(f"Stored learning experience: {experience.id}")
         except Exception as e:
             self.logger.error(f"Failed to store learning experience: {str(e)}")
             # Fallback to in-memory storage if database fails
