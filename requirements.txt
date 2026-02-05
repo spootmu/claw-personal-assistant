@@ -1,6 +1,4 @@
 # Requirements for Claw Personal Assistant
-asyncio
-logging
-datetime
 requests
 aiohttp
+typing
