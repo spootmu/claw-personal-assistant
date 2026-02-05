@@ -32,5 +32,21 @@
 - Be mindful of absolute vs relative paths
 - Account for different directory structures on Windows vs Unix systems
 
+## Common Error #5: Forgetting Git Synchronization
+**Problem**: Not committing and pushing changes to remote repository regularly
+**Solution**: Always commit and push changes after completing significant work
+- Use git add . to stage all changes
+- Use git commit with descriptive messages to save changes
+- Use git push origin main to sync with remote repository
+- Make this a standard part of workflow to prevent data loss
+
+## Common Error #6: Privacy and Security Oversight
+**Problem**: Accidentally committing sensitive or private information to public repositories
+**Solution**: Always review files before committing and maintain proper .gitignore
+- Update .gitignore to exclude sensitive files (.env, *.secret, config.json, etc.)
+- Never commit files containing passwords, API keys, or personal information
+- Use git status to review all staged files before committing
+- For privacy files, use local storage instead of version control
+
 ## Key Takeaway
 Always check tool parameters carefully before execution to avoid common mistakes that waste resources and cause errors.
