@@ -15,6 +15,8 @@ from typing import Dict, Any, Callable
 
 # Import the new community integration module
 from community_integration import CommunityIntegration
+# Import the community monitoring task
+from tasks.community_monitor_task import CommunityMonitorTask
 
 
 class TaskEngine:
@@ -203,6 +205,17 @@ class ClawAssistant:
             return {"status": "healthy", "timestamp": datetime.now().isoformat()}
         
         await self.task_engine.register_task("health_check", health_check, "every_5_minutes")
+        
+        # Register community monitoring task
+        self.community_monitor = CommunityMonitorTask(self)
+        async def run_community_monitor():
+            # Run the community monitor for a short period then return
+            task = asyncio.create_task(self.community_monitor.run())
+            # Let it run briefly then return
+            await asyncio.sleep(1)  # Short delay to allow task to start
+            return {"status": "community_monitor_started", "timestamp": datetime.now().isoformat()}
+        
+        await self.task_engine.register_task("community_monitor", run_community_monitor, "continuous")
         
     async def run(self):
         """Main run loop"""
