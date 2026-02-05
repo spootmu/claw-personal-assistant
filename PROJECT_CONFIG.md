@@ -26,6 +26,7 @@
 3. **Memory System** - Handles learning and retention
 4. **Community Integration** - Processes external insights
 5. **Database Manager** - Structured data storage
+6. **Data Scraper** - Advanced web scraping with anti-detection capabilities
 
 ## Operation
 
