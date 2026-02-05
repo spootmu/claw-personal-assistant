@@ -21,6 +21,8 @@ from tasks.community_monitor_task import CommunityMonitorTask
 from database import DatabaseManager
 # Import the intelligent scheduler
 from tasks.intelligent_scheduler import IntelligentScheduler, TaskPriority
+# Import the task manager
+from tasks.task_manager import TaskManager
 
 
 class TaskEngine:
@@ -170,11 +172,12 @@ class ClawAssistant:
     
     def __init__(self):
         self.name = "Claw"
-        self.version = "0.4.0"
+        self.version = "0.5.0"
         self.created_at = datetime.now()
         self.logger = self._setup_logger()
         self.task_engine = TaskEngine(self)
         self.intelligent_scheduler = IntelligentScheduler(self)  # New: Advanced task scheduler
+        self.task_manager = None  # Will be initialized in _initialize_components
         self.memory_system = MemorySystem()
         self.community_integration = None  # Will be initialized in _initialize_components
         self.config = self._load_config()
@@ -228,6 +231,11 @@ class ClawAssistant:
         # Initialize intelligent scheduler
         self.intelligent_scheduler.start()
         self.logger.info("Intelligent scheduler started")
+        
+        # Initialize task manager
+        self.task_manager = TaskManager(self)
+        await self.task_manager.start_background_services()
+        self.logger.info("Task manager started with background services")
         
         # Perform initial community insight processing
         async with self.community_integration as ci:
