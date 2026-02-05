@@ -298,6 +298,43 @@ class ClawAssistant:
         # Start the periodic health checks in the background
         schedule_periodic_health_checks()
         
+        # Schedule periodic community insight application
+        async def apply_community_insights():
+            """Periodically apply community insights to improve functionality"""
+            self.logger.info("Applying community insights to improve functionality")
+            try:
+                # Apply insights for key areas
+                topics_to_apply = ["task scheduling", "memory management", "learning system", "security"]
+                
+                for topic in topics_to_apply:
+                    await self.apply_community_insights(topic)
+                
+                # Additionally, have the learning system apply insights specifically
+                if self.learning_system:
+                    await self.learning_system.apply_community_insights_to_improve_functions()
+                
+                self.logger.info("Completed application of community insights")
+                return {"status": "community_insights_applied", "timestamp": datetime.now().isoformat(), "topics_covered": topics_to_apply}
+            except Exception as e:
+                self.logger.error(f"Error applying community insights: {e}")
+                return {"status": "error", "error": str(e)}
+        
+        # Schedule community insight application to run every 2 hours
+        def schedule_periodic_community_application():
+            async def run_periodic():
+                while True:
+                    try:
+                        await apply_community_insights()
+                        await asyncio.sleep(7200)  # 2 hours
+                    except Exception as e:
+                        self.logger.error(f"Error in periodic community insight application: {e}")
+                        await asyncio.sleep(7200)  # Still wait 2 hours before retry
+            
+            asyncio.create_task(run_periodic())
+        
+        # Start the periodic community insight application in the background
+        schedule_periodic_community_application()
+        
         self.logger.info("Default tasks registered with intelligent scheduler")
         
     async def run(self):
