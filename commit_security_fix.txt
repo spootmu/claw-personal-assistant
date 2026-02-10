@@ -1,0 +1,5 @@
+fix: remove credential files and add security awareness
+
+- Remove JS files that contained sensitive API keys
+- Update ERROR_RESOLUTION_GUIDE.md with credential security guidelines
+- Add lesson about never storing credentials in source files
